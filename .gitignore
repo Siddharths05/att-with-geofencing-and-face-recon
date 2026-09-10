@@ -1,0 +1,15 @@
+.venv/
+backend/__pycache__/
+backend/.env
+backend/photos/
+backend/faces_ref/
+backend/*.jpg
+backend/*.jpeg
+backend/*.png
+frontend/node_modules/
+*.pyc
+frontend-temp/
+backend/HRDb.docx
+backend/~$*.docx
+frontend/CLAUDE.md
+frontend/AGENTS.md
