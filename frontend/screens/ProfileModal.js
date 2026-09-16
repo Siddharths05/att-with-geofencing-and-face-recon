@@ -1,9 +1,10 @@
 // ProfileModal.js
 // Full-screen profile sheet, opened from an avatar button in the app
-// header. Photo sits large and left-aligned at the top; Basic / Contact /
+// header. Photo + computed stats sit large at the top; Basic / Contact /
 // Documents / Family / More are a vertical accordion below it -- tap a
 // section name to expand its fields in place, tap again to collapse.
-// Reuses the app's existing theme tokens -- no new palette introduced.
+// Reuses the app's existing theme tokens -- no new palette introduced,
+// no new dependencies added.
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Modal,
@@ -88,6 +89,50 @@ function initials(name) {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
   return (parts[0]?.[0] || "").toUpperCase() + (parts[1]?.[0] || "").toUpperCase();
+}
+
+// ==================================================
+// DERIVED / COMPUTED DISPLAY VALUES
+// None of this is stored anywhere -- it's computed client-side from
+// dates the API already returns, purely to make the header read like a
+// real profile summary instead of a list of raw fields.
+// ==================================================
+
+function prettyDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function calcAge(dobStr) {
+  if (!dobStr) return null;
+  const dob = new Date(dobStr);
+  if (Number.isNaN(dob.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDiff = now.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) age--;
+  return age >= 0 ? age : null;
+}
+
+// Returns { label, active } -- e.g. { label: "2y 3m", active: true } while
+// still employed, or { label: "3y 1m", active: false } once DOL is set.
+function calcTenure(dojStr, dolStr) {
+  if (!dojStr) return null;
+  const start = new Date(dojStr);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = dolStr ? new Date(dolStr) : new Date();
+  let years = end.getFullYear() - start.getFullYear();
+  let months = end.getMonth() - start.getMonth();
+  if (end.getDate() < start.getDate()) months--;
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  if (years < 0) return null;
+  const label = years > 0 ? `${years}y ${months}m` : `${months}m`;
+  return { label, active: !dolStr };
 }
 
 export function ProfileAvatarButton({ onPress, style }) {
@@ -176,125 +221,46 @@ export default function ProfileModal({ visible, onClose }) {
     };
   }, [visible]);
 
-  const renderBasic = (basic) => (
-    <View>
-      <SectionHeader title="Personal" />
-      <Field label="Employee code" value={basic.emp_code} />
-      <Field label="Username" value={basic.username} />
-      <Field label="Date of birth" value={basic.date_of_birth} />
-      <Field label="Gender" value={basic.gender} />
-      <Field label="Marital status" value={basic.marital_status} />
-      <Field label="Anniversary" value={basic.anniversary} />
-      <Field label="Qualification" value={basic.qualification_code} />
-      <Field label="Blood group" value={basic.blood_group} />
-      <Field label="Height" value={basic.height} />
-      <Field label="Weight" value={basic.weight} />
-      <Field label="Aadhar no." value={basic.aadhar_no} />
+  const basic = profile?.basic;
+  const age = basic ? calcAge(basic.date_of_birth) : null;
+  const tenure = basic ? calcTenure(basic.joining_date, basic.leaving_date) : null;
 
-      <SectionHeader title="Employment" />
-      <Field label="Department" value={basic.department_code} />
-      <Field label="Designation" value={basic.designation_code} />
-      <Field label="Joining date" value={basic.joining_date} />
-      <Field label="Leaving date" value={basic.leaving_date} />
-      <Field label="Work place" value={basic.work_place} />
+  // --------------------------------------------------
+  // SHARED PRESENTATIONAL PIECES
+  // --------------------------------------------------
 
-      <SectionHeader title="Address" />
-      <Field label="Resident address" value={basic.resident_address} />
-      <Field label="Native address" value={basic.native_address} />
-      <Field label="Short address" value={basic.short_address} />
-
-      <SectionHeader title="Financial" />
-      <Field label="Bank" value={basic.bank_code} />
-      <Field label="Account no." value={basic.account_no} />
-      <Field label="RTGS/NEFT/IFSC" value={basic.rtgs} />
-      <Field label="Cash account" value={basic.cash_account_code} />
-      <Field label="UAN no." value={basic.uan_no} />
-      <Field label="ESIC no." value={basic.esic_no} />
-      <Field label="PAN no." value={basic.pan_no} />
-    </View>
-  );
-
-  const renderMoreInfo = (info) => (
-    <View>
-      <SectionHeader title="Identification" />
-      <Field label="Identification mark" value={info.identification_mark} />
-      <Field label="Total experience (yrs)" value={info.total_experience} />
-      <Field label="Referred by (emp ID)" value={info.referred_by_emp_id} />
-
-      <SectionHeader title="Nearest police station" />
-      <Field label="Police station" value={info.police_station} />
-      <Field label="Address" value={info.police_address} />
-      <Field label="Contact no." value={info.police_contact} />
-
-      <SectionHeader title="Witnesses (if left the org)" />
-      <Field label="1) Witness (emp ID)" value={info.witness1_emp_id} />
-      <Field label="2) Witness (emp ID)" value={info.witness2_emp_id} />
-      <Field label="Inform UAN about leaving" value={info.inform_uan_on_leaving ? "Yes" : "No"} />
-      <Field label="Inform ESIC about leaving" value={info.inform_esic_on_leaving ? "Yes" : "No"} />
-
-      <SectionHeader title="Personalities who know employee" />
-      <Field label="1) Name" value={info.personality1_name} />
-      <Field label="1) Designation" value={info.personality1_designation_code} />
-      <Field label="1) Address" value={info.personality1_address} />
-      <Field label="1) Contact no." value={info.personality1_contact} />
-      <Field label="2) Name" value={info.personality2_name} />
-      <Field label="2) Designation" value={info.personality2_designation_code} />
-      <Field label="2) Address" value={info.personality2_address} />
-      <Field label="2) Contact no." value={info.personality2_contact} />
-    </View>
-  );
-
-  const renderContact = (contacts) =>
-    contacts.length === 0 ? (
-      <EmptyState text="No contact details on file." />
-    ) : (
-      contacts.map((c, i) => (
-        <View key={i} style={styles.entryCard}>
-          <Text style={styles.entryTitle}>{c.contact_type_code}</Text>
-          <Text style={styles.entryBody}>{c.contact}{c.ext ? ` ext. ${c.ext}` : ""}</Text>
+  function SectionCard({ title, children }) {
+    return (
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionCardHeader}>
+          <View style={styles.sectionDot} />
+          <Text style={styles.sectionCardTitle}>{title}</Text>
         </View>
-      ))
+        {children}
+      </View>
     );
-
-  const renderDocuments = (documents) =>
-    documents.length === 0 ? (
-      <EmptyState text="No documents on file." />
-    ) : (
-      documents.map((d, i) => (
-        <View key={i} style={styles.entryCard}>
-          <Text style={styles.entryTitle}>{d.document_type_code}</Text>
-          <Text style={styles.entryBody}>{d.doc_file}</Text>
-          {d.valid_until ? (
-            <Text style={styles.entryMeta}>Valid until {new Date(d.valid_until).toLocaleDateString()}</Text>
-          ) : null}
-        </View>
-      ))
-    );
-
-  const renderFamily = (family) =>
-    family.length === 0 ? (
-      <EmptyState text="No family details on file." />
-    ) : (
-      family.map((r, i) => (
-        <View key={i} style={styles.entryCard}>
-          <Text style={styles.entryTitle}>{r.relative_name}</Text>
-          <Text style={styles.entryBody}>{r.relationship_code} · {r.marital_status}</Text>
-          {r.date_of_birth ? (
-            <Text style={styles.entryMeta}>Born {new Date(r.date_of_birth).toLocaleDateString()}</Text>
-          ) : null}
-        </View>
-      ))
-    );
-
-  function SectionHeader({ title }) {
-    return <Text style={styles.sectionHeader}>{title}</Text>;
   }
 
-  function Field({ label, value }) {
+  function InfoGrid({ items }) {
+    // Drop fields with nothing to show rather than rendering a wall of
+    // "—" placeholders -- a section quietly gets shorter instead.
+    const visible = items.filter((item) => item.value !== undefined);
+    if (visible.length === 0) {
+      return <Text style={styles.emptyInline}>Nothing on file for this section.</Text>;
+    }
     return (
-      <View style={styles.fieldRow}>
-        <Text style={styles.fieldLabel}>{label}</Text>
-        <Text style={styles.fieldValue}>{value || "—"}</Text>
+      <View style={styles.infoGrid}>
+        {visible.map((item, i) => (
+          <View
+            key={i}
+            style={[styles.infoTile, item.wide && styles.infoTileWide]}
+          >
+            <Text style={styles.infoLabel}>{item.label}</Text>
+            <Text style={styles.infoValue} numberOfLines={3}>
+              {item.value || "—"}
+            </Text>
+          </View>
+        ))}
       </View>
     );
   }
@@ -303,6 +269,197 @@ export default function ProfileModal({ visible, onClose }) {
     return <Text style={styles.emptyText}>{text}</Text>;
   }
 
+  // --------------------------------------------------
+  // BASIC TAB -- same fields as before, regrouped into cards with a
+  // denser two-column grid instead of one long list of full-width rows.
+  // --------------------------------------------------
+
+  const renderBasic = (b) => (
+    <View>
+      <SectionCard title="Personal">
+        <InfoGrid
+          items={[
+            { label: "Date of birth", value: prettyDate(b.date_of_birth) },
+            { label: "Age", value: age !== null ? `${age} yrs` : undefined },
+            { label: "Gender", value: b.gender },
+            { label: "Marital status", value: b.marital_status },
+            { label: "Anniversary", value: prettyDate(b.anniversary) },
+            { label: "Qualification", value: b.qualification_code },
+            { label: "Blood group", value: b.blood_group },
+            { label: "Height / Weight", value: b.height || b.weight ? `${b.height || "—"} cm · ${b.weight || "—"} kg` : undefined },
+            { label: "Aadhar no.", value: b.aadhar_no, wide: true },
+          ]}
+        />
+      </SectionCard>
+
+      <SectionCard title="Employment">
+        <InfoGrid
+          items={[
+            { label: "Department", value: b.department_code },
+            { label: "Designation", value: b.designation_code },
+            { label: "Joining date", value: prettyDate(b.joining_date) },
+            {
+              label: tenure?.active ? "Time with company" : "Time served",
+              value: tenure?.label,
+            },
+            { label: "Leaving date", value: prettyDate(b.leaving_date) },
+            { label: "Work place", value: b.work_place },
+          ]}
+        />
+      </SectionCard>
+
+      <SectionCard title="Address">
+        <InfoGrid
+          items={[
+            { label: "Resident address", value: b.resident_address, wide: true },
+            { label: "Native address", value: b.native_address, wide: true },
+            { label: "Short address", value: b.short_address, wide: true },
+          ]}
+        />
+      </SectionCard>
+
+      <SectionCard title="Financial">
+        <InfoGrid
+          items={[
+            { label: "Bank", value: b.bank_code },
+            { label: "Cash account", value: b.cash_account_code },
+            { label: "Account no.", value: b.account_no },
+            { label: "RTGS/NEFT/IFSC", value: b.rtgs },
+            { label: "UAN no.", value: b.uan_no },
+            { label: "ESIC no.", value: b.esic_no },
+            { label: "PAN no.", value: b.pan_no },
+          ]}
+        />
+      </SectionCard>
+    </View>
+  );
+
+  const renderMoreInfo = (info) => (
+    <View>
+      <SectionCard title="Identification">
+        <InfoGrid
+          items={[
+            { label: "Identification mark", value: info.identification_mark, wide: true },
+            { label: "Total experience", value: info.total_experience ? `${info.total_experience} yrs` : undefined },
+            { label: "Referred by (emp ID)", value: info.referred_by_emp_id },
+          ]}
+        />
+      </SectionCard>
+
+      <SectionCard title="Nearest police station">
+        <InfoGrid
+          items={[
+            { label: "Police station", value: info.police_station },
+            { label: "Contact no.", value: info.police_contact },
+            { label: "Address", value: info.police_address, wide: true },
+          ]}
+        />
+      </SectionCard>
+
+      <SectionCard title="Witnesses (if left the org)">
+        <InfoGrid
+          items={[
+            { label: "1) Witness (emp ID)", value: info.witness1_emp_id },
+            { label: "2) Witness (emp ID)", value: info.witness2_emp_id },
+            { label: "Inform UAN on leaving", value: info.inform_uan_on_leaving === null || info.inform_uan_on_leaving === undefined ? undefined : (info.inform_uan_on_leaving ? "Yes" : "No") },
+            { label: "Inform ESIC on leaving", value: info.inform_esic_on_leaving === null || info.inform_esic_on_leaving === undefined ? undefined : (info.inform_esic_on_leaving ? "Yes" : "No") },
+          ]}
+        />
+      </SectionCard>
+
+      <SectionCard title="Personalities who know employee">
+        <InfoGrid
+          items={[
+            { label: "1) Name", value: info.personality1_name },
+            { label: "1) Designation", value: info.personality1_designation_code },
+            { label: "1) Contact no.", value: info.personality1_contact },
+            { label: "1) Address", value: info.personality1_address, wide: true },
+            { label: "2) Name", value: info.personality2_name },
+            { label: "2) Designation", value: info.personality2_designation_code },
+            { label: "2) Contact no.", value: info.personality2_contact },
+            { label: "2) Address", value: info.personality2_address, wide: true },
+          ]}
+        />
+      </SectionCard>
+    </View>
+  );
+
+  // --------------------------------------------------
+  // CONTACT / DOCUMENTS / FAMILY -- entry cards get a small colored
+  // marker keyed off type so a long list is scannable at a glance
+  // instead of every card looking identical.
+  // --------------------------------------------------
+
+  const renderContact = (contacts) =>
+    contacts.length === 0 ? (
+      <EmptyState text="No contact details on file." />
+    ) : (
+      contacts.map((c, i) => (
+        <View key={i} style={styles.entryCard}>
+          <View style={styles.entryHeaderRow}>
+            <View style={styles.entryMarker} />
+            <Text style={styles.entryTitle}>{c.contact_type_code || "Contact"}</Text>
+          </View>
+          <Text style={styles.entryBody}>
+            {c.contact}
+            {c.ext ? ` ext. ${c.ext}` : ""}
+          </Text>
+        </View>
+      ))
+    );
+
+  const renderDocuments = (documents) =>
+    documents.length === 0 ? (
+      <EmptyState text="No documents on file." />
+    ) : (
+      documents.map((d, i) => {
+        const expired = d.valid_until ? new Date(d.valid_until) < new Date() : false;
+        return (
+          <View key={i} style={styles.entryCard}>
+            <View style={styles.entryHeaderRow}>
+              <View style={[styles.entryMarker, expired && styles.entryMarkerWarn]} />
+              <Text style={styles.entryTitle}>{d.document_type_code || "Document"}</Text>
+              {expired ? (
+                <View style={styles.expiredPill}>
+                  <Text style={styles.expiredPillText}>Expired</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.entryBody}>{d.doc_file}</Text>
+            {d.valid_until ? (
+              <Text style={styles.entryMeta}>Valid until {prettyDate(d.valid_until)}</Text>
+            ) : null}
+          </View>
+        );
+      })
+    );
+
+  const renderFamily = (family) =>
+    family.length === 0 ? (
+      <EmptyState text="No family details on file." />
+    ) : (
+      family.map((r, i) => (
+        <View key={i} style={styles.entryCard}>
+          <View style={styles.entryHeaderRow}>
+            <View style={styles.entryAvatar}>
+              <Text style={styles.entryAvatarText}>{initials(r.relative_name)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.entryTitle}>{r.relative_name || "Relative"}</Text>
+              <Text style={styles.entryBody}>
+                {[r.relationship_code, r.marital_status].filter(Boolean).join(" · ") || "—"}
+              </Text>
+            </View>
+          </View>
+          {r.date_of_birth ? (
+            <Text style={styles.entryMeta}>Born {prettyDate(r.date_of_birth)}</Text>
+          ) : null}
+        </View>
+      ))
+    );
+
+  const isActive = !basic?.leaving_date;
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.screen}>
@@ -310,24 +467,46 @@ export default function ProfileModal({ visible, onClose }) {
           <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.8}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
+
           <View style={styles.headerAvatar}>
-            {profile?.basic?.photo_base64 ? (
-              <Image
-                source={{ uri: profile.basic.photo_base64 }}
-                style={styles.headerAvatarImage}
-              />
+            {basic?.photo_base64 ? (
+              <Image source={{ uri: basic.photo_base64 }} style={styles.headerAvatarImage} />
             ) : (
-              <Text style={styles.headerAvatarText}>
-                {initials(profile?.basic?.name)}
-              </Text>
+              <Text style={styles.headerAvatarText}>{initials(basic?.name)}</Text>
             )}
           </View>
+
           <Text style={styles.headerName} numberOfLines={1}>
-            {profile?.basic?.name || "Employee"}
+            {basic?.name || "Employee"}
           </Text>
-          <Text style={styles.headerSub}>
-            {profile?.basic?.emp_code ? `Code ${profile.basic.emp_code}` : ""}
-          </Text>
+
+          <View style={styles.headerSubRow}>
+            <Text style={styles.headerSub}>
+              {basic?.emp_code ? `Code ${basic.emp_code}` : ""}
+              {basic?.designation_code ? ` · ${basic.designation_code}` : ""}
+            </Text>
+            {basic ? (
+              <View style={[styles.statusPill, isActive ? styles.statusPillActive : styles.statusPillLeft]}>
+                <Text style={[styles.statusPillText, isActive ? styles.statusPillTextActive : styles.statusPillTextLeft]}>
+                  {isActive ? "Active" : `Left ${prettyDate(basic.leaving_date)}`}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          {basic ? (
+            <View style={styles.chipRow}>
+              {age !== null ? <Chip label={`${age} yrs old`} styles={styles} /> : null}
+              {tenure ? (
+                <Chip
+                  label={`${tenure.label} ${tenure.active ? "at company" : "served"}`}
+                  styles={styles}
+                />
+              ) : null}
+              {basic.blood_group ? <Chip label={basic.blood_group} styles={styles} /> : null}
+              {basic.marital_status ? <Chip label={basic.marital_status} styles={styles} /> : null}
+            </View>
+          ) : null}
         </View>
 
         {usingSample ? (
@@ -369,6 +548,14 @@ export default function ProfileModal({ visible, onClose }) {
   );
 }
 
+function Chip({ label, styles }) {
+  return (
+    <View style={styles.chip}>
+      <Text style={styles.chipText}>{label}</Text>
+    </View>
+  );
+}
+
 function createStyles({ colors, radius, spacing, shadow, typography }) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bg },
@@ -378,29 +565,54 @@ function createStyles({ colors, radius, spacing, shadow, typography }) {
       paddingBottom: spacing.lg,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      alignItems: "center",
     },
     headerAvatar: {
-      width: 84,
-      height: 84,
+      width: 88,
+      height: 88,
       borderRadius: radius.pill,
       backgroundColor: colors.primary,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: spacing.sm,
       overflow: "hidden",
+      borderWidth: 3,
+      borderColor: colors.primarySoft,
     },
     headerAvatarText: { color: "#fff", fontWeight: "700", fontSize: 28 },
-    headerAvatarImage: { width: 84, height: 84 },
-    sectionHeader: {
-      ...typography.label,
-      color: colors.primary,
-      marginTop: spacing.md,
-      marginBottom: 4,
-      textTransform: "uppercase",
-      fontSize: 11,
+    headerAvatarImage: { width: 88, height: 88 },
+    headerName: { ...typography.h2, textAlign: "center" },
+    headerSubRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 4,
+      gap: 8,
     },
-    headerName: { ...typography.h2 },
-    headerSub: { ...typography.small, marginTop: 2 },
+    headerSub: { ...typography.small },
+    statusPill: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: radius.pill,
+    },
+    statusPillActive: { backgroundColor: colors.successBadgeBg },
+    statusPillLeft: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    statusPillText: { fontSize: 10, fontWeight: "700" },
+    statusPillTextActive: { color: colors.successText },
+    statusPillTextLeft: { color: colors.textMuted },
+    chipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "center",
+      gap: 6,
+      marginTop: spacing.sm,
+    },
+    chip: {
+      backgroundColor: colors.primarySoft,
+      borderRadius: radius.pill,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    chipText: { color: colors.primary, fontWeight: "600", fontSize: 12 },
     closeButton: {
       position: "absolute",
       top: 56,
@@ -436,15 +648,49 @@ function createStyles({ colors, radius, spacing, shadow, typography }) {
       marginTop: spacing.sm,
     },
     content: { paddingHorizontal: spacing.lg },
-    fieldRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+
+    // --- Section cards (Basic / More tabs) ---
+    sectionCard: {
+      backgroundColor: colors.card,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.md,
+      marginTop: spacing.sm,
     },
-    fieldLabel: { ...typography.label },
-    fieldValue: { ...typography.body, maxWidth: "60%", textAlign: "right" },
+    sectionCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: spacing.sm,
+    },
+    sectionDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.primary,
+      marginRight: 8,
+    },
+    sectionCardTitle: {
+      ...typography.label,
+      color: colors.primary,
+      textTransform: "uppercase",
+      fontSize: 11,
+    },
+    infoGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+    },
+    infoTile: {
+      width: "48%",
+      marginBottom: spacing.sm,
+    },
+    infoTileWide: { width: "100%" },
+    infoLabel: { ...typography.small, color: colors.textFaint, marginBottom: 2 },
+    infoValue: { ...typography.body, color: colors.text },
+    emptyInline: { ...typography.small, color: colors.textFaint },
+
+    // --- Entry cards (Contact / Documents / Family) ---
     entryCard: {
       backgroundColor: colors.card,
       borderRadius: radius.md,
@@ -453,9 +699,39 @@ function createStyles({ colors, radius, spacing, shadow, typography }) {
       padding: spacing.md,
       marginBottom: spacing.sm,
     },
-    entryTitle: { ...typography.h2, fontSize: 15, marginBottom: 2 },
+    entryHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 2,
+    },
+    entryMarker: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.primary,
+      marginRight: 8,
+    },
+    entryMarkerWarn: { backgroundColor: colors.danger },
+    entryAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.pill,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: spacing.sm,
+    },
+    entryAvatarText: { color: colors.primary, fontWeight: "700", fontSize: 12 },
+    entryTitle: { ...typography.h2, fontSize: 15, flex: 1 },
     entryBody: { ...typography.body, color: colors.textMuted },
     entryMeta: { ...typography.small, marginTop: 4 },
+    expiredPill: {
+      backgroundColor: colors.dangerBadgeBg,
+      borderRadius: radius.pill,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    expiredPillText: { color: colors.dangerText, fontSize: 10, fontWeight: "700" },
     emptyText: {
       ...typography.body,
       color: colors.textFaint,

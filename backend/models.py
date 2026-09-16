@@ -18,7 +18,18 @@ class SalEmployee(Base):
     app, e.g. via pgAdmin). Only the columns this app actually uses are
     declared here -- the real table has many more columns, and SQLAlchemy is
     fine operating on a subset as long as the table already exists (we never
-    run create_all against a fresh DB for this table)."""
+    run create_all against a fresh DB for this table).
+
+    NOTE ON `nullable=False` BELOW: this app only ever reads SalEmployee, so
+    SQLAlchemy never enforces these -- nullable is purely a DDL hint used
+    when *creating* a table, and create_all skips this one since it already
+    exists. Several columns marked nullable=False here (DOJ, Male, Married,
+    BloodGrp, Aadhar, the address/statutory-ID/police/personality fields,
+    etc.) are actually nullable on the real table, per the ERP backend's own
+    model.py. Left as-is rather than rewritten line-by-line since it's
+    cosmetic here -- but profile_schemas.py and profile_router.py were
+    fixed to handle the NULLs these columns can genuinely contain, since
+    those DO get enforced (by Pydantic) and would 500 otherwise."""
 
     __tablename__ = "SalEmployee"
 
@@ -26,11 +37,12 @@ class SalEmployee(Base):
     EmpCode = Column(String(30), nullable=False)
     Employee = Column(String(50), nullable=False)  # display name
 
-    UserName = Column(String(15), nullable=False, unique=True, index=True)
-    # NOTE: legacy column is VARCHAR(10) -- too short to hold a bcrypt hash,
-    # so this is almost certainly stored as plaintext today. auth.py compares
-    # it directly rather than hashing. Flagging as a security gap to revisit.
-    Password = Column(String(10), nullable=False)
+    UserName = Column(String(100), nullable=True, index=True)
+    # Real column is VARCHAR(255), not (10) -- widened by the ERP admin
+    # backend to hold bcrypt hashes. See auth.verify_password for how
+    # this app handles both the old plaintext rows and the new hashed
+    # ones living in the same column.
+    Password = Column(String(255), nullable=True)
 
     Photo = Column(LargeBinary, nullable=True)  # BYTEA reference photo
 

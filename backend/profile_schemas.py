@@ -9,18 +9,18 @@ from pydantic import BaseModel
 
 
 class BasicInfo(BaseModel):
-    emp_code: str
-    name: str
+    emp_code: Optional[str] = None
+    name: Optional[str] = None
     username: str
     date_of_birth: Optional[str] = None
-    gender: str
-    marital_status: str
+    gender: Optional[str] = None
+    marital_status: Optional[str] = None
     department_code: Optional[str] = None  # raw fkDepId until a Department lookup table is wired in
     designation_code: Optional[str] = None  # raw fkDegId until a Designation lookup table is wired in
-    joining_date: str
+    joining_date: Optional[str] = None
     leaving_date: Optional[str] = None
-    blood_group: str
-    aadhar_no: str
+    blood_group: Optional[str] = None
+    aadhar_no: Optional[str] = None
 
     # --- Added to match the additional fields on the legacy Employee screen
     qualification_code: Optional[str] = None  # raw fkQualId until a Qualification lookup table is wired in
@@ -69,8 +69,8 @@ class MoreInfo(BaseModel):
 
 
 class ContactEntry(BaseModel):
-    contact_type_code: str  # raw fkMOCId until ContMOC lookup is wired in
-    contact: str
+    contact_type_code: Optional[str] = None  # raw fkMOCId until ContMOC lookup is wired in
+    contact: Optional[str] = None
     ext: Optional[str] = None
 
     class Config:
@@ -78,8 +78,8 @@ class ContactEntry(BaseModel):
 
 
 class DocumentEntry(BaseModel):
-    document_type_code: str  # raw fkDTId until DocTitle lookup is wired in
-    doc_file: str
+    document_type_code: Optional[str] = None  # raw fkDTId until DocTitle lookup is wired in
+    doc_file: Optional[str] = None
     valid_until: Optional[datetime] = None
 
     class Config:
@@ -87,10 +87,10 @@ class DocumentEntry(BaseModel):
 
 
 class RelationEntry(BaseModel):
-    relative_name: str
-    relationship_code: str  # raw fkRelId until ContRelationship lookup is wired in
+    relative_name: Optional[str] = None
+    relationship_code: Optional[str] = None  # raw fkRelId until ContRelationship lookup is wired in
     date_of_birth: Optional[datetime] = None
-    marital_status: str
+    marital_status: Optional[str] = None
 
     class Config:
         from_attributes = True

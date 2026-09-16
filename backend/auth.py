@@ -24,10 +24,25 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain: str, stored: str) -> bool:
-    """SalEmployee."Password" is VARCHAR(10), too short for a bcrypt hash --
-    the legacy HR system stores it as plaintext. Compare directly. If this
-    table is ever migrated to hashed passwords, swap this for
-    pwd_context.verify(plain, stored)."""
+    """SalEmployee.Password started life as VARCHAR(10) -- too short for a
+    bcrypt hash -- so old rows created directly in the legacy desktop app
+    are plaintext. The ERP admin backend (security.py) now hashes every
+    password it sets with bcrypt into a widened VARCHAR(255) column, so
+    any employee created or edited through that admin panel has a real
+    bcrypt hash instead.
+
+    Both shapes exist in the same column right now, so detect which one
+    we're looking at rather than assuming: bcrypt hashes always start
+    with one of these three prefixes; anything else is treated as the
+    legacy plaintext value.
+    """
+    if stored.startswith(("$2a$", "$2b$", "$2y$")):
+        try:
+            return pwd_context.verify(plain, stored)
+        except ValueError:
+            # Malformed hash -- fall through to a plain compare rather
+            # than 500ing the login.
+            return plain == stored
     return plain == stored
 
 
