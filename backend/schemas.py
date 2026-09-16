@@ -25,6 +25,10 @@ class LocationCheckOut(BaseModel):
     within_range: bool
     distance_meters: Optional[float] = None
     allowed_radius_meters: float
+    # None = altitude wasn't checked (device sent no altitude reading).
+    # True/False = whether it matched OFFICE_ALTITUDE_METERS within tolerance.
+    altitude_ok: Optional[bool] = None
+    altitude_diff_meters: Optional[float] = None
 
 
 class AttendanceOut(BaseModel):

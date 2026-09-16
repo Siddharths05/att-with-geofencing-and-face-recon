@@ -14,6 +14,7 @@ import models
 import schemas
 from database import Base, engine, get_db, FACES_DIR
 from face_utils import extract_face, save_face_ref, load_face_ref, compare_faces, NoFaceFoundError
+from profile_router import router as profile_router
 
 Base.metadata.create_all(bind=engine)  # only affects the "attendance" table --
 # SalEmployee / SalStructure already exist in the legacy DB and are left alone.
@@ -27,8 +28,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ALLOWED_RADIUS_METERS = 50
+app.include_router(profile_router)
 
+ALLOWED_RADIUS_METERS = 50
 
 def haversine(lat1, lon1, lat2, lon2) -> float:
     """Great-circle distance between two lat/long points, in meters."""

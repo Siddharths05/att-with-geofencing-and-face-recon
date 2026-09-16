@@ -31,7 +31,7 @@ export default function LoginScreen({ navigation }) {
   const theme = useTheme();
   const { colors, radius, spacing, shadow, typography, mode, isDark, cycleTheme } = theme;
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const themeIcon = { light: "☀️", dark: "🌙", reader: "📖" }[mode];
+  const themeLabel = { light: "Light", dark: "Dark", reader: "Reader" }[mode];
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -69,7 +69,7 @@ export default function LoginScreen({ navigation }) {
           onPress={cycleTheme}
           activeOpacity={0.8}
         >
-          <Text style={styles.themeToggleText}>{themeIcon}</Text>
+          <Text style={styles.themeToggleText}>{themeLabel}</Text>
         </TouchableOpacity>
 
         <View style={styles.brandRow}>
@@ -140,8 +140,8 @@ function createStyles({ colors, radius, spacing, shadow, typography }) {
       position: "absolute",
       top: spacing.md,
       right: spacing.lg,
-      width: 40,
       height: 40,
+      paddingHorizontal: 16,
       borderRadius: radius.pill,
       backgroundColor: colors.card,
       borderWidth: 1,
@@ -150,7 +150,7 @@ function createStyles({ colors, radius, spacing, shadow, typography }) {
       justifyContent: "center",
       zIndex: 1,
     },
-    themeToggleText: { fontSize: 18 },
+    themeToggleText: { fontSize: 13, fontWeight: "600", color: colors.textMuted },
     brandRow: {
       flexDirection: "row",
       alignItems: "center",
