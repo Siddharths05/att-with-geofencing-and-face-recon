@@ -32,13 +32,27 @@ class LocationCheckOut(BaseModel):
 
 
 class AttendanceOut(BaseModel):
-    id: int
-    username: str
-    status: str
-    distance_meters: Optional[float] = None
+    """Mirrors EmpAttendancePunch. face_match/face_similarity_percent are
+    NOT columns on that table (the physical ERP table has no such
+    columns) -- they're only ever returned on the check-in response
+    itself, computed fresh for that request, and are None on anything
+    read back later (e.g. /attendance/history). If you need to audit
+    historical face-match outcomes, that needs a separate table keyed by
+    pkEAId -- flagging rather than silently dropping the data."""
+
+    pkEAId: int
+    emp_code: str
+    pay_code: str
+    at_date: str
+    punch_in_time: Optional[str] = None
+    punch_out_time: Optional[str] = None
+    device: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude: Optional[float] = None
+    status: str  # "present" or "rejected" -- computed, not stored (see main.py)
     face_match: Optional[bool] = None
     face_similarity_percent: Optional[float] = None
-    checked_in_at: datetime
 
     class Config:
         from_attributes = True

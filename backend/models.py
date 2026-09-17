@@ -1,15 +1,12 @@
 from sqlalchemy import (
     Column,
-    Integer,
     Numeric,
     String,
-    Float,
     DateTime,
-    ForeignKey,
     Boolean,
+    Integer,
     LargeBinary,
 )
-from sqlalchemy.sql import func
 from database import Base
 
 
@@ -48,8 +45,8 @@ class SalEmployee(Base):
 
     # --- Added for the employee-profile "Basic" tab -- confirmed real
     # columns from the actual SalEmployee DDL. fkDepId/fkDegId are lookup
-    # codes (Department/Designation tables); no lookup table structure was
-    # provided yet, so profile_router.py returns the raw code for now.
+    # codes (Department/Designation tables); resolved to names at call
+    # time in profile_router.py.
     DOB = Column(DateTime, nullable=True)
     DOJ = Column(DateTime, nullable=False)
     DOL = Column(DateTime, nullable=True)  # date of leaving
@@ -62,8 +59,7 @@ class SalEmployee(Base):
 
     # --- Added for the fuller "Basic" tab, matching fields visible on the
     # legacy desktop Employee screen. All confirmed real columns from the
-    # SalEmployee DDL; lookup codes (fkQualId) are returned raw same as
-    # fkDepId/fkDegId until a lookup table is wired in.
+    # SalEmployee DDL.
     fkQualId = Column(String(5), nullable=True)  # qualification lookup code
     Anni = Column(DateTime, nullable=True)  # anniversary
     PAddress = Column(String(255), nullable=False)  # "Resident Address" on screen
@@ -82,8 +78,6 @@ class SalEmployee(Base):
 
     # --- Added for the "More info" tab (identification/police/witness/
     # personality-reference fields from the legacy "leaving" screen).
-    # Login credentials (UserName/Password/Question/Answer) already exist
-    # above and are intentionally NOT re-exposed on the profile response.
     Mark = Column(String(50), nullable=False)  # "Identification Mark" on screen
     Experience = Column(String(5), nullable=True)  # "Total Experience"
     fkREmpId = Column(Numeric(18, 0), nullable=True)  # "Referred By" -- another employee
@@ -105,31 +99,162 @@ class SalEmployee(Base):
 
 
 class SalStructure(Base):
-    """Maps to the existing legacy "SalStructure" table. Only the columns
-    needed for the check-in location lookup are declared."""
+    """Maps to "SalStructureTest" -- the table that REPLACES the old,
+    5-column "SalStructure" table this app used to read. Kept as a
+    physically separate table from "SalStructure" in the ERP DB (not a
+    rename at the DB level), so __tablename__ below intentionally does
+    NOT match the class name -- same pattern as EmpAttendancePunch /
+    "AttendancePunch" in this file. Do NOT "fix" this mismatch; if you
+    do, you recreate the exact ghost-table bug described in main.py's
+    top-of-file comment (SQLAlchemy will happily create a fresh, empty
+    table matching whatever name you put here instead of erroring).
 
-    __tablename__ = "SalStructure"
+    If SalStructureTest is ever renamed to SalStructure at the DB level,
+    or the ERP admin backend starts writing to a table under a different
+    final name, update __tablename__ here to match -- and nothing else
+    in this app needs to change, since every query goes through this
+    class, not the raw table name.
+
+    Full ~90-column schema mapped below since the user supplied the
+    complete DDL; only pkSSId / fkEmpId / SalStart / Latitude /
+    Longitude / Altitude are actually read by this app today (see
+    main.py's _get_office_location()). NOT NULL / nullable below mirrors
+    the real DDL for documentation purposes -- SQLAlchemy never enforces
+    it since this app only ever reads this table, never inserts into it
+    (see the nullable note on SalEmployee above for the same reasoning).
+    """
+
+    __tablename__ = "SalStructureTest"
 
     pkSSId = Column(Numeric(18, 0), primary_key=True)
-    fkEmpId = Column(Numeric(18, 0), ForeignKey("SalEmployee.pkEmpId"), index=True)
-    SalStart = Column(DateTime, nullable=True)
+    fkEmpId = Column(Numeric(18, 0), nullable=False, index=True)
+    SalStart = Column(DateTime, nullable=False)
+    Basic = Column(Numeric(19, 4), nullable=False)
+    BType = Column(String(7), nullable=False)
+    Allowance = Column(Numeric(19, 4), nullable=True)
+    TAllowance = Column(String(5), nullable=False)
+    Travelling = Column(Numeric(19, 4), nullable=True)
+    TTravelling = Column(String(5), nullable=False)
+    Housing = Column(Numeric(19, 4), nullable=True)
+    THousing = Column(String(5), nullable=False)
+    Daily = Column(Numeric(19, 4), nullable=True)
+    TDaily = Column(String(5), nullable=False)
+    Incentive = Column(Numeric(19, 4), nullable=True)
+    TIncentive = Column(String(5), nullable=False)
+    Education = Column(Numeric(19, 4), nullable=True)
+    TEducation = Column(String(5), nullable=False)
+    Medical = Column(Numeric(19, 4), nullable=True)
+    TMedical = Column(String(5), nullable=False)
+    Other = Column(Numeric(19, 4), nullable=True)
+    TOther = Column(String(5), nullable=False)
+    OTI = Column(Numeric(19, 4), nullable=True)
+    TOTI = Column(Boolean, nullable=False)
+    OTII = Column(Numeric(19, 4), nullable=True)
+    TOTII = Column(Boolean, nullable=False)
+    RDayI = Column(String(10), nullable=False)
+    RDayII = Column(String(10), nullable=False)
+    PH = Column(Integer, nullable=False)
+    SL = Column(Numeric(10, 1), nullable=False)
+    CL = Column(Numeric(10, 1), nullable=False)
+    UCL = Column(Numeric(10, 1), nullable=False)
+    WH = Column(Numeric(18, 2), nullable=False)
+    RWH = Column(Numeric(18, 2), nullable=False)
+    BL = Column(Integer, nullable=False)
+    BLD = Column(Integer, nullable=False)
+    ARule = Column(String(10), nullable=False)
+    OTB = Column(Numeric(18, 0), nullable=False)
+    CalPT = Column(Boolean, nullable=False)
+    CalPF = Column(Boolean, nullable=False)
+    CalESIC = Column(Boolean, nullable=False)
+    CalTDS = Column(Boolean, nullable=False)
+    SlabTDS = Column(Integer, nullable=True)
+    Revise = Column(DateTime, nullable=False)
+    ScanMB = Column(Boolean, nullable=True)
+    fkSAcctId = Column(String(10), nullable=False)
+    Remarks = Column(String(100), nullable=False)
+    fkUserId = Column(String(5), nullable=False)
+    OtherBasic = Column(Boolean, nullable=False)
+    EOT = Column(Boolean, nullable=False)
+    EWHour = Column(Boolean, nullable=False)
+    LYEWHour = Column(Numeric(19, 2), nullable=False)
+    fkLAcctId = Column(String(10), nullable=False)
+    MABasic = Column(Boolean, nullable=False)
+    EABasic = Column(Boolean, nullable=False)
+    IncentiveBasic = Column(Boolean, nullable=False)
+    DABasic = Column(Boolean, nullable=False)
+    HABasic = Column(Boolean, nullable=False)
+    TABasic = Column(Boolean, nullable=False)
+    AllowanceBasic = Column(Boolean, nullable=False)
+    fkFContId = Column(String(10), nullable=True)
+    fkTContId = Column(String(10), nullable=True)
+    SalGross = Column(Numeric(19, 4), nullable=False)
+    fkIAcctId = Column(String(10), nullable=True)
+    AbPenalty = Column(Numeric(19, 4), nullable=False)
+    Variant = Column(Boolean, nullable=False)
+    PFA = Column(Boolean, nullable=False)
+    PFTA = Column(Boolean, nullable=False)
+    PFHA = Column(Boolean, nullable=False)
+    PFI = Column(Boolean, nullable=False)
+    PFEA = Column(Boolean, nullable=False)
+    PFMA = Column(Boolean, nullable=False)
+    PFOA = Column(Boolean, nullable=False)
+    RDVariant = Column(Boolean, nullable=False)
+    Retention = Column(Numeric(19, 4), nullable=True)
+    fkEmp1Id = Column(Numeric(18, 0), nullable=True)
+    fkEmp2Id = Column(Numeric(18, 0), nullable=True)
+    fkRAcctId = Column(String(10), nullable=True)
+    SalDaily = Column(Numeric(19, 4), nullable=True)
+    SetPF = Column(Boolean, nullable=False)
+    Sandwich = Column(Boolean, nullable=False)
+    GHA = Column(Boolean, nullable=False)
+    RDA = Column(Boolean, nullable=False)
+    IORF = Column(Boolean, nullable=False)
+    OAOP = Column(Boolean, nullable=False)
+    LTimeROff = Column(Integer, nullable=True)
+    # --- The three columns this app actually queries directly ---
     Latitude = Column(Numeric(18, 6), nullable=True)
     Longitude = Column(Numeric(18, 6), nullable=True)
+    Altitude = Column(Numeric(18, 6), nullable=True)
+    TDSDeduct = Column(Numeric(18, 0), nullable=True)
+    MDeduction = Column(Numeric(18, 2), nullable=True)
+    DedDescription = Column(String(100), nullable=True)
+    fkDesId = Column(String(5), nullable=True)
 
 
-class Attendance(Base):
-    __tablename__ = "attendance"
+class EmpAttendancePunch(Base):
+    """Replaces the old local `attendance` table. This is the real ERP
+    punch table (same shape as EmpAttendance, minus EmpName/Status/Manual
+    which this app doesn't need, plus Altitude which the old table never
+    had). One row per employee per day, keyed by (EmpCode, AtDate) --
+    check-in fills PunchInTime; PunchOutTime stays NULL until a
+    check-out flow exists (see main.py).
 
-    id = Column(Integer, primary_key=True, index=True)
-    # Keyed off SalEmployee.pkEmpId, but the JWT/session identifies users by
-    # username, so we also store it denormalized for convenient querying.
-    emp_id = Column(Numeric(18, 0), ForeignKey("SalEmployee.pkEmpId", ondelete="CASCADE"))
-    username = Column(String(15), nullable=False, index=True)
+    NOTE: the physical table is named "AttendancePunch" (no "Emp" prefix)
+    -- the class is named EmpAttendancePunch here only to avoid clashing
+    with anything else, __tablename__ is what actually matters and must
+    stay pointed at the real table.
 
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
-    distance_meters = Column(Float)
-    face_match = Column(Boolean, nullable=True)
-    face_similarity_percent = Column(Float, nullable=True)
-    status = Column(String(20), nullable=False)  # 'present' or 'rejected'
-    checked_in_at = Column(DateTime(timezone=True), server_default=func.now())
+    AtDate is stored as 'YYYY-MM-DD' so plain string ordering/filtering
+    works -- if the ERP admin backend writes a different date format into
+    this same physical table, switch AtDate comparisons in main.py to
+    parse accordingly.
+    """
+
+    __tablename__ = "AttendancePunch"
+
+    pkEAId = Column(Numeric(18, 0), primary_key=True, autoincrement=True)
+    EmpCode = Column(String(30), nullable=False, index=True)
+    PayCode = Column(String(50), nullable=False)
+    AtDate = Column(String(50), nullable=False, index=True)  # 'YYYY-MM-DD'
+    PunchInTime = Column(String(8), nullable=True)   # 'HH:MM:SS'
+    PunchOutTime = Column(String(8), nullable=True)  # 'HH:MM:SS'
+    Device = Column(String(100), nullable=True)
+    Latitude = Column(Numeric(18, 6), nullable=True)
+    Longitude = Column(Numeric(18, 6), nullable=True)
+    Altitude = Column(Numeric(18, 6), nullable=True)
+
+    # Not physical DB columns -- populated in main.py before returning a
+    # response, since face-match results were never part of this table
+    # and have nowhere else to live right now. See main.py's TODO there
+    # if you want these persisted (e.g. a small side table keyed by
+    # pkEAId) rather than recomputed/discarded per request.

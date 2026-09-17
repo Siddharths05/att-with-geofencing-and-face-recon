@@ -25,17 +25,56 @@ function getErrorMessage(err) {
   if (Array.isArray(detail)) {
     return detail.map((d) => d.msg || JSON.stringify(d)).join("\n");
   }
-  return "Check-in failed";
+  return "Request failed";
 }
+
+// Copy that differs between the check-in and check-out flows. Everything
+// else (location pre-check, camera, live face polling) is shared -- only
+// the endpoint hit and the wording around it change based on mode.
+const MODE_COPY = {
+  checkIn: {
+    endpoint: "/attendance/check-in",
+    idleTitle: "Check in for today",
+    idleSubtitle:
+      "We'll check your location and take a quick selfie to verify it's you before marking you present",
+    buttonLabel: "Check in",
+    successBadge: "Present",
+    successText: "You're marked present for today.",
+  },
+  checkOut: {
+    endpoint: "/attendance/check-out",
+    idleTitle: "Check out for today",
+    idleSubtitle:
+      "We'll check your location and take a quick selfie to verify it's you before checking you out",
+    buttonLabel: "Check out",
+    successBadge: "Checked out",
+    successText: "You're checked out for today.",
+  },
+};
 
 export default function AttendanceScreen() {
   const theme = useTheme();
-  const { colors, mode, isDark, cycleTheme } = theme;
+  const { colors, mode: themeMode, isDark, cycleTheme } = theme;
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const themeLabel = { light: "Light", dark: "Dark", reader: "Reader" }[mode];
+  const themeLabel = { light: "Light", dark: "Dark", reader: "Reader" }[themeMode];
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
+
+  // Today's actual punch status, fetched from the server on mount --
+  // without this the screen has no way to know whether the logged-in
+  // employee has already checked in/out today, and always defaulted to
+  // showing the check-in button regardless of real state. That's what
+  // caused "shows check-in UI but says already checked in": the button
+  // never reflected server state, only the error message did.
+  // "loading" -> "not-checked-in" | "checked-in" | "checked-out"
+  const [attendanceStatus, setAttendanceStatus] = useState("loading");
+  const [todayRecord, setTodayRecord] = useState(null);
+
+  // Which flow is currently active -- decides the endpoint hit and the
+  // wording shown, everything else (location, camera, face poll) is
+  // shared between the two.
+  const [mode, setMode] = useState("checkIn");
 
   // "idle" -> "camera" -> back to "idle" (success or timeout/failure)
   const [stage, setStage] = useState("idle");
@@ -44,24 +83,24 @@ export default function AttendanceScreen() {
 
   // Live, phone-lock-style face feedback while the camera is open.
   // "no-face" -> red border, "detecting" -> face seen but not yet matched
-  // (amber), "matched" -> green border + auto check-in.
+  // (amber), "matched" -> green border + auto-confirm.
   const [liveStatus, setLiveStatus] = useState("no-face");
   const [livePct, setLivePct] = useState(0);
   const pollingRef = useRef(null);
   const timeoutRef = useRef(null);
   const isPollingRequestInFlightRef = useRef(false);
   const consecutiveMatchesRef = useRef(0);
-  // Location captured during the pre-check in startCheckIn(), reused by
-  // confirmCheckIn() so the user isn't prompted for GPS twice.
+  // Location captured during the pre-check in startFlow(), reused by
+  // confirmFlow() so the user isn't prompted for GPS twice.
   const checkedLocationRef = useRef(null);
   const [profileVisible, setProfileVisible] = useState(false);
 
   const POLL_INTERVAL_MS = 900;
-  // A single confident match is enough to trigger the check-in attempt --
-  // /attendance/check-in re-runs face matching server-side anyway, so this
-  // only affects how quickly the UI reacts, not whether the check-in
-  // actually succeeds. Requiring 2+ in a row was too easily reset by one
-  // flaky frame and was stalling people into the timeout below.
+  // A single confident match is enough to trigger the confirm attempt --
+  // the backend re-runs face matching server-side anyway, so this only
+  // affects how quickly the UI reacts, not whether the action actually
+  // succeeds. Requiring 2+ in a row was too easily reset by one flaky
+  // frame and was stalling people into the timeout below.
   const REQUIRED_CONSECUTIVE_MATCHES = 1;
   const TOTAL_TIMEOUT_MS = 15000; // give up after 15s of no confident match
 
@@ -70,6 +109,36 @@ export default function AttendanceScreen() {
     month: "long",
     day: "numeric",
   });
+
+  const copy = MODE_COPY[mode];
+
+  const refreshTodayStatus = useCallback(async () => {
+    try {
+      const res = await api.get("/attendance/today");
+      const record = res.data; // null if no row for today yet
+      setTodayRecord(record);
+      if (!record || !record.punch_in_time) {
+        setAttendanceStatus("not-checked-in");
+        setMode("checkIn");
+      } else if (!record.punch_out_time) {
+        setAttendanceStatus("checked-in");
+        setMode("checkOut");
+      } else {
+        setAttendanceStatus("checked-out");
+      }
+    } catch (err) {
+      // If this fails (e.g. transient network issue on load), fall back
+      // to the check-in flow rather than leaving the screen stuck on a
+      // spinner forever -- worst case the backend's own 409 catches a
+      // stale assumption, same safety net as before this fix.
+      setAttendanceStatus("not-checked-in");
+      setMode("checkIn");
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshTodayStatus();
+  }, [refreshTodayStatus]);
 
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
@@ -120,7 +189,7 @@ export default function AttendanceScreen() {
         if (consecutiveMatchesRef.current >= REQUIRED_CONSECUTIVE_MATCHES) {
           stopPolling();
           clearTotalTimeout();
-          confirmCheckIn(frame);
+          confirmFlow(frame);
         }
       } else {
         consecutiveMatchesRef.current = 0;
@@ -133,7 +202,8 @@ export default function AttendanceScreen() {
     } finally {
       isPollingRequestInFlightRef.current = false;
     }
-  }, [stopPolling, clearTotalTimeout]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopPolling, clearTotalTimeout, mode]);
 
   useEffect(() => {
     if (stage === "camera") {
@@ -156,14 +226,14 @@ export default function AttendanceScreen() {
     };
   }, [stage, pollFace, stopPolling, clearTotalTimeout]);
 
-  const startCheckIn = async () => {
+  const startFlow = async () => {
     setLastResult(null);
 
     // 1. Location first -- no point opening the camera if they're not even
     // at the right site.
     const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
     if (locStatus !== "granted") {
-      Alert.alert("Permission needed", "Location access is required to check in");
+      Alert.alert("Permission needed", "Location access is required to continue");
       return;
     }
 
@@ -184,6 +254,9 @@ export default function AttendanceScreen() {
       form.append("latitude", String(location.coords.latitude));
       form.append("longitude", String(location.coords.longitude));
 
+      // Shared pre-check for both flows -- it only reports whether this
+      // employee has a site/photo on file and whether they're in range,
+      // it doesn't care whether this is a check-in or check-out attempt.
       const res = await api.post("/attendance/check-location", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -204,7 +277,7 @@ export default function AttendanceScreen() {
         // No reference photo on file for this account -- face check is
         // skipped entirely, no need to open the camera at all.
         setLoading(false);
-        await confirmCheckIn(null);
+        await confirmFlow(null);
         return;
       }
     } catch (err) {
@@ -217,27 +290,28 @@ export default function AttendanceScreen() {
     if (!cameraPermission?.granted) {
       const perm = await requestCameraPermission();
       if (!perm.granted) {
-        Alert.alert("Permission needed", "Camera access is required to check in");
+        Alert.alert("Permission needed", "Camera access is required to continue");
         return;
       }
     }
     setStage("camera");
   };
 
-  const cancelCheckIn = () => {
+  const cancelFlow = () => {
     stopPolling();
     clearTotalTimeout();
     setStage("idle");
   };
 
-  const confirmCheckIn = async (photo) => {
+  const confirmFlow = async (photo) => {
     setLoading(true);
+    const attemptedMode = mode; // capture before any state updates below
     try {
-      // Reuse the location captured in startCheckIn's pre-check -- already
+      // Reuse the location captured in startFlow's pre-check -- already
       // confirmed in range, no need to prompt for GPS a second time.
       const location = checkedLocationRef.current;
       if (!location) {
-        setLastResult({ success: false, detail: "Location not available. Please try again." });
+        setLastResult({ success: false, mode: attemptedMode, detail: "Location not available. Please try again." });
         setStage("idle");
         return;
       }
@@ -250,20 +324,32 @@ export default function AttendanceScreen() {
       if (photo) {
         form.append("photo", {
           uri: photo.uri,
-          name: "checkin.jpg",
+          name: `${attemptedMode}.jpg`,
           type: "image/jpeg",
         });
       }
 
-      const res = await api.post("/attendance/check-in", form, {
+      const res = await api.post(MODE_COPY[attemptedMode].endpoint, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      setLastResult({ success: true, ...res.data });
+      setLastResult({ success: true, mode: attemptedMode, ...res.data });
+      setTodayRecord(res.data);
+      if (attemptedMode === "checkIn") {
+        setAttendanceStatus("checked-in");
+        setMode("checkOut");
+      } else {
+        setAttendanceStatus("checked-out");
+      }
       setStage("idle");
     } catch (err) {
-      setLastResult({ success: false, detail: getErrorMessage(err) });
+      setLastResult({ success: false, mode: attemptedMode, detail: getErrorMessage(err) });
       setStage("idle");
+      // The server is the source of truth on "already checked in/out" --
+      // if our local guess of the status was stale (e.g. checked in from
+      // another device since this screen loaded), resync it here instead
+      // of leaving the button pointed at the wrong action.
+      refreshTodayStatus();
     } finally {
       setLoading(false);
     }
@@ -290,30 +376,53 @@ export default function AttendanceScreen() {
       </View>
 
       <View style={styles.card}>
-        {stage === "idle" && (
+        {stage === "idle" && attendanceStatus === "loading" && (
+          <View style={{ paddingVertical: 24 }}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )}
+
+        {stage === "idle" && attendanceStatus === "checked-out" && (
           <>
             <View style={styles.iconCircle}>
               <View style={styles.iconDot} />
             </View>
-            <Text style={styles.cardTitle}>Check in for today</Text>
+            <Text style={styles.cardTitle}>All done for today</Text>
             <Text style={styles.cardSubtitle}>
-              We'll check your location and take a quick selfie to verify it's you before marking you present
+              {todayRecord?.punch_in_time && todayRecord?.punch_out_time
+                ? `Checked in at ${todayRecord.punch_in_time} · Checked out at ${todayRecord.punch_out_time}`
+                : "You've completed attendance for today."}
             </Text>
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={startCheckIn}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Check in</Text>
-              )}
-            </TouchableOpacity>
           </>
         )}
+
+        {stage === "idle" &&
+          (attendanceStatus === "not-checked-in" || attendanceStatus === "checked-in") && (
+            <>
+              <View style={styles.iconCircle}>
+                <View style={styles.iconDot} />
+              </View>
+              <Text style={styles.cardTitle}>{copy.idleTitle}</Text>
+              <Text style={styles.cardSubtitle}>
+                {attendanceStatus === "checked-in" && todayRecord?.punch_in_time
+                  ? `Checked in at ${todayRecord.punch_in_time}. ${copy.idleSubtitle}`
+                  : copy.idleSubtitle}
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={startFlow}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>{copy.buttonLabel}</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
 
         {stage === "camera" && (
           <>
@@ -360,7 +469,7 @@ export default function AttendanceScreen() {
             <View style={styles.rowButtons}>
               <TouchableOpacity
                 style={styles.secondaryButton}
-                onPress={cancelCheckIn}
+                onPress={cancelFlow}
                 activeOpacity={0.85}
               >
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
@@ -392,15 +501,15 @@ export default function AttendanceScreen() {
                     : styles.badgeTextDanger,
                 ]}
               >
-                {lastResult.success ? "Present" : "Rejected"}
+                {lastResult.success
+                  ? MODE_COPY[lastResult.mode]?.successBadge ?? "Success"
+                  : "Rejected"}
               </Text>
             </View>
             {lastResult.success ? (
               <Text style={styles.resultMeta}>
                 {[
-                  typeof lastResult.distance_meters === "number"
-                    ? `${lastResult.distance_meters.toFixed(1)}m from office`
-                    : null,
+                  typeof lastResult.latitude === "number" ? "Location verified" : null,
                   typeof lastResult.face_similarity_percent === "number"
                     ? `${lastResult.face_similarity_percent}% face match`
                     : null,
@@ -412,7 +521,7 @@ export default function AttendanceScreen() {
           </View>
           <Text style={styles.resultText}>
             {lastResult.success
-              ? "You're marked present for today."
+              ? MODE_COPY[lastResult.mode]?.successText
               : lastResult.detail}
           </Text>
         </View>
