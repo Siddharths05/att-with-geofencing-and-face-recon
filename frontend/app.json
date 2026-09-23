@@ -7,23 +7,28 @@
     "icon": "./assets/images/icon.png",
     "scheme": "frontendtemp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to verify your face during check-in."
-      }
+        "NSCameraUsageDescription": "This app uses the camera to verify your face during check-in.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.threeasol.userattendace"
     },
     "android": {
-      "permissions": ["CAMERA"],
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.threeasol.userattendace"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -50,11 +55,23 @@
         {
           "cameraPermission": "This app uses the camera to verify your face during check-in."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
-
     "experiments": {
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "505f4e1c-9327-42d8-a982-626e986df2a8"
+      }
     }
   }
 }

@@ -13,3 +13,9 @@ backend/HRDb.docx
 backend/~$*.docx
 frontend/CLAUDE.md
 frontend/AGENTS.md
+attendance_app.dump
+.env
+.venv/
+__pycache__/
+*.pyc
+backend/__pycache__/
