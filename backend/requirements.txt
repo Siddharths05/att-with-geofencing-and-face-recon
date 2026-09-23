@@ -9,3 +9,4 @@ pydantic[email]==2.13.5
 Pillow==12.3.0
 numpy==2.5.3
 opencv-contrib-python-headless==4.10.0.84
+python-multipart==0.0.32
