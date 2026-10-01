@@ -1,8 +1,9 @@
 // ThemeContext.js
-// Provides the active theme (light / dark / reader) to the whole app.
+// Provides the active theme (light / dark / reader) and accent color
+// (purple / blue) to the whole app.
 // "light" and "dark" can follow the device's system setting; "reader" is
 // always an explicit manual choice (there's no OS-level "reader mode").
-// The choice is persisted to AsyncStorage.
+// Both choices are persisted to AsyncStorage.
 //
 // Usage:
 //   1. Wrap your app root once:
@@ -17,7 +18,11 @@
 //
 //   2. In any screen:
 //        import { useTheme } from "../ThemeContext";
-//        const { colors, spacing, radius, shadow, typography, mode, isDark, cycleTheme } = useTheme();
+//        const {
+//          colors, spacing, radius, shadow, typography,
+//          mode, isDark, cycleTheme,
+//          accent, setAccent, accentOptions,
+//        } = useTheme();
 
 import React, {
   createContext,
@@ -29,9 +34,8 @@ import React, {
 import { useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  lightColors,
-  darkColors,
-  readerColors,
+  ACCENT_OPTIONS,
+  getPalette,
   radius,
   spacing,
   getShadow,
@@ -39,26 +43,41 @@ import {
 } from "./theme";
 
 const THEME_STORAGE_KEY = "theme_preference"; // "light" | "dark" | "reader" | "system"
+const ACCENT_STORAGE_KEY = "accent_preference"; // "purple" | "blue"
 const MODE_ORDER = ["light", "dark", "reader"];
+const ACCENT_KEYS = ACCENT_OPTIONS.map((a) => a.key);
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const systemScheme = useColorScheme(); // "light" | "dark" | null
   const [preference, setPreference] = useState("system");
+  const [accent, setAccentState] = useState("purple");
   const [ready, setReady] = useState(false);
 
-  // Load any saved manual preference on mount.
+  // Load any saved manual preferences on mount.
   useEffect(() => {
     let isMounted = true;
-    AsyncStorage.getItem(THEME_STORAGE_KEY)
-      .then((saved) => {
-        if (isMounted && (saved === "light" || saved === "dark" || saved === "reader" || saved === "system")) {
-          setPreference(saved);
+    AsyncStorage.multiGet([THEME_STORAGE_KEY, ACCENT_STORAGE_KEY])
+      .then((pairs) => {
+        if (!isMounted) return;
+        const saved = Object.fromEntries(pairs);
+        const savedTheme = saved[THEME_STORAGE_KEY];
+        const savedAccent = saved[ACCENT_STORAGE_KEY];
+        if (
+          savedTheme === "light" ||
+          savedTheme === "dark" ||
+          savedTheme === "reader" ||
+          savedTheme === "system"
+        ) {
+          setPreference(savedTheme);
+        }
+        if (ACCENT_KEYS.includes(savedAccent)) {
+          setAccentState(savedAccent);
         }
       })
       .catch(() => {
-        // If storage read fails, just fall back to system preference.
+        // If storage read fails, just fall back to defaults.
       })
       .finally(() => {
         if (isMounted) setReady(true);
@@ -82,6 +101,17 @@ export function ThemeProvider({ children }) {
     }
   };
 
+  // Choose the accent color: "purple" | "blue". Works in every mode.
+  const setAccent = async (next) => {
+    if (!ACCENT_KEYS.includes(next)) return;
+    setAccentState(next);
+    try {
+      await AsyncStorage.setItem(ACCENT_STORAGE_KEY, next);
+    } catch (e) {
+      // Non-fatal: accent just won't persist across app restarts.
+    }
+  };
+
   // Cycles light -> dark -> reader -> light.
   const cycleTheme = () => {
     const currentIndex = MODE_ORDER.indexOf(mode);
@@ -94,22 +124,24 @@ export function ThemeProvider({ children }) {
   const toggleTheme = () => setThemePreference(isDark ? "light" : "dark");
 
   const value = useMemo(() => {
-    const palettes = { light: lightColors, dark: darkColors, reader: readerColors };
-    const activeColors = palettes[mode] || lightColors;
+    const activeColors = getPalette(mode, accent);
     return {
       mode, // "light" | "dark" | "reader"
       isDark,
       preference, // "light" | "dark" | "reader" | "system"
+      accent, // "purple" | "blue"
+      accentOptions: ACCENT_OPTIONS, // [{ key, label, swatch }]
       colors: activeColors,
       radius,
       spacing,
       shadow: getShadow(isDark),
       typography: getTypography(activeColors, mode),
       setThemePreference,
+      setAccent,
       cycleTheme,
       toggleTheme,
     };
-  }, [mode, isDark, preference]);
+  }, [mode, isDark, preference, accent]);
 
   // Avoid a flash of the wrong theme while the saved preference loads.
   if (!ready) return null;

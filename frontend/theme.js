@@ -1,79 +1,143 @@
 // theme.js
 // Defines the light, dark, and reader palettes plus shared design tokens.
-// Light mode  = white surfaces + a lighter purple accent.
-// Dark mode   = black/near-black surfaces + a darker purple accent.
-// Reader mode = warm sepia paper + a muted brown-amber accent.
+// Light mode  = white surfaces + accent.
+// Dark mode   = black/near-black surfaces + a deeper accent.
+// Reader mode = the light palette with a warm paper tint on the surfaces.
+//
+// The accent ("secondary color") can be "purple" or "blue" and works in
+// every mode. Use getPalette(mode, accent) to get a full palette.
 
 import { Platform } from "react-native";
 
-export const lightColors = {
+export const ACCENT_OPTIONS = [
+  { key: "purple", label: "Purple", swatch: "#A64DFF" },
+  { key: "blue", label: "Blue", swatch: "#3B82F6" },
+];
+
+// ---- Neutral parts of each palette (do not change with the accent) ----
+const lightBase = {
   bg: "#FFFFFF",
   card: "#FFFFFF",
-  border: "#ECE6F9",
-  text: "#1A1523",
-  textMuted: "#6B6478",
-  textFaint: "#A79FB8",
-  primary: "#A64DFF", // lighter purple
-  primarySoft: "#F2E6FF",
   inputBg: "#FBFBFC",
   danger: "#DC2626",
   dangerSoft: "#FDECEC",
   amber: "#D97706",
   amberSoft: "#FEF3E2",
-  // Status accents used e.g. for the "Present"/"Rejected" result card.
-  successBorder: "#E3CBFF",
-  successBadgeBg: "#EBD9FF",
-  successText: "#7A1FCB",
   dangerBorder: "#F7C6C6",
   dangerBadgeBg: "#F6D0D0",
   dangerText: "#B02323",
 };
 
-export const darkColors = {
+const darkBase = {
   bg: "#000000",
-  card: "#150F1D",
-  border: "#2B2136",
-  text: "#F5F2FA",
-  textMuted: "#B4A9C4",
-  textFaint: "#847893",
-  primary: "#7A1FCB", // darker purple
-  primarySoft: "#241333",
-  inputBg: "#0D0D10",
   danger: "#F87171",
   dangerSoft: "#3A1B1B",
   amber: "#FBBF24",
   amberSoft: "#3A2E12",
-  successBorder: "#3A2A55",
-  successBadgeBg: "#3A2A55",
-  successText: "#D6B4FF",
   dangerBorder: "#5A2B2B",
   dangerBadgeBg: "#5A2B2B",
   dangerText: "#FCA5A5",
 };
 
-// Reader mode: warm sepia "paper" surfaces with a muted brown-amber accent —
-// meant to be easy on the eyes for reading-heavy screens.
-export const readerColors = {
-  bg: "#F4ECD8",
-  card: "#FBF6E9",
-  border: "#E4D6B8",
-  text: "#3B2E20",
-  textMuted: "#7A6A4E",
-  textFaint: "#A79877",
-  primary: "#8B5E34",
-  primarySoft: "#EADFC4",
-  inputBg: "#F7EFDC",
-  danger: "#B23A2E",
-  dangerSoft: "#F3DDD6",
-  amber: "#A9752E",
-  amberSoft: "#F1E2C2",
-  successBorder: "#D7C193",
-  successBadgeBg: "#E3D2A6",
-  successText: "#5C3A1E",
-  dangerBorder: "#E3B7A8",
-  dangerBadgeBg: "#F0DCCF",
-  dangerText: "#8A3A2A",
+// ---- Accent-dependent tokens, per accent and per light/dark ----
+// (primary + its soft fill, the "success" status colors, and the slightly
+// accent-tinted borders / text greys / dark surfaces.)
+const ACCENT_TOKENS = {
+  purple: {
+    light: {
+      primary: "#A64DFF",
+      primarySoft: "#F2E6FF",
+      border: "#ECE6F9",
+      text: "#1A1523",
+      textMuted: "#6B6478",
+      textFaint: "#A79FB8",
+      successBorder: "#E3CBFF",
+      successBadgeBg: "#EBD9FF",
+      successText: "#7A1FCB",
+    },
+    dark: {
+      primary: "#7A1FCB",
+      primarySoft: "#241333",
+      card: "#150F1D",
+      inputBg: "#0D0D10",
+      border: "#2B2136",
+      text: "#F5F2FA",
+      textMuted: "#B4A9C4",
+      textFaint: "#847893",
+      successBorder: "#3A2A55",
+      successBadgeBg: "#3A2A55",
+      successText: "#D6B4FF",
+    },
+  },
+  blue: {
+    light: {
+      primary: "#3B82F6",
+      primarySoft: "#E6F0FF",
+      border: "#E3EAF7",
+      text: "#131A28",
+      textMuted: "#5F6B80",
+      textFaint: "#9AA5B8",
+      successBorder: "#C7DBFF",
+      successBadgeBg: "#D6E5FF",
+      successText: "#1D4ED8",
+    },
+    dark: {
+      primary: "#2563EB",
+      primarySoft: "#12203A",
+      card: "#0F1522",
+      inputBg: "#0B0D12",
+      border: "#1F2B42",
+      text: "#F2F5FA",
+      textMuted: "#A9B6CC",
+      textFaint: "#76849C",
+      successBorder: "#24406B",
+      successBadgeBg: "#24406B",
+      successText: "#A9C8FF",
+    },
+  },
 };
+
+// ---- Reader mode: light palette + warm paper tint on the surfaces ----
+// Accent, text, and status colors are unchanged -- only the
+// backgrounds/borders/soft fills pick up the tint.
+const READER_TINT = "#F4E4C1"; // warm sepia
+const READER_TINT_STRENGTH = 0.45; // 0 = no tint, 1 = fully sepia. Adjust to taste.
+
+function tint(hex, amount = READER_TINT_STRENGTH) {
+  const parse = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [r, g, b] = parse(hex);
+  const [tr, tg, tb] = parse(READER_TINT);
+  const mix = (a, t) =>
+    Math.round(a + (t - a) * amount).toString(16).padStart(2, "0");
+  return `#${mix(r, tr)}${mix(g, tg)}${mix(b, tb)}`.toUpperCase();
+}
+
+function buildReader(light) {
+  return {
+    ...light,
+    bg: tint(light.bg),
+    card: tint(light.card, 0.3), // a bit lighter than bg so cards still lift
+    inputBg: tint(light.inputBg, 0.35),
+    border: tint(light.border),
+    primarySoft: tint(light.primarySoft),
+    dangerSoft: tint(light.dangerSoft),
+    amberSoft: tint(light.amberSoft),
+  };
+}
+
+// mode: "light" | "dark" | "reader"; accent: "purple" | "blue"
+export function getPalette(mode, accent = "purple") {
+  const tokens = ACCENT_TOKENS[accent] || ACCENT_TOKENS.purple;
+  if (mode === "dark") return { ...darkBase, ...tokens.dark };
+  const light = { ...lightBase, ...tokens.light };
+  return mode === "reader" ? buildReader(light) : light;
+}
+
+// Default (purple) palettes, kept for backward compatibility with any file
+// that imports these directly.
+export const lightColors = getPalette("light", "purple");
+export const darkColors = getPalette("dark", "purple");
+export const readerColors = getPalette("reader", "purple");
 
 // Backward-compatible default export (light palette), in case any other
 // file imports `colors` directly without going through the theme context.

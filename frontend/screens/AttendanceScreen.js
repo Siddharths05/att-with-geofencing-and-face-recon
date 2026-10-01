@@ -14,6 +14,8 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import api from "../api";
 import { useTheme } from "../ThemeContext";
 import ProfileModal, { ProfileAvatarButton } from "./ProfileModal";
+import RequestModal from "./RequestModal";
+import AppearanceModal, { AppearanceButton } from "./AppearanceModal";
 
 // FastAPI returns `detail` as a plain string for most errors (e.g. rejected
 // check-in), but as an ARRAY of validation-error objects for 422s (e.g. a
@@ -54,9 +56,8 @@ const MODE_COPY = {
 
 export default function AttendanceScreen() {
   const theme = useTheme();
-  const { colors, mode: themeMode, isDark, cycleTheme } = theme;
+  const { colors, isDark } = theme;
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const themeLabel = { light: "Light", dark: "Dark", reader: "Reader" }[themeMode];
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
@@ -94,6 +95,8 @@ export default function AttendanceScreen() {
   // confirmFlow() so the user isn't prompted for GPS twice.
   const checkedLocationRef = useRef(null);
   const [profileVisible, setProfileVisible] = useState(false);
+  const [requestsVisible, setRequestsVisible] = useState(false);
+  const [appearanceVisible, setAppearanceVisible] = useState(false);
 
   const POLL_INTERVAL_MS = 900;
   // A single confident match is enough to trigger the confirm attempt --
@@ -362,14 +365,15 @@ export default function AttendanceScreen() {
         <View style={styles.headerTopRow}>
           <Text style={styles.date}>{today}</Text>
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <ProfileAvatarButton onPress={() => setProfileVisible(true)} />
             <TouchableOpacity
-              style={styles.themeToggle}
-              onPress={cycleTheme}
+              style={styles.requestsButton}
+              onPress={() => setRequestsVisible(true)}
               activeOpacity={0.8}
             >
-              <Text style={styles.themeToggleText}>{themeLabel}</Text>
+              <Text style={styles.requestsButtonText}>₹</Text>
             </TouchableOpacity>
+            <ProfileAvatarButton onPress={() => setProfileVisible(true)} />
+            <AppearanceButton onPress={() => setAppearanceVisible(true)} />
           </View>
         </View>
         <Text style={styles.title}>Mark attendance</Text>
@@ -527,6 +531,8 @@ export default function AttendanceScreen() {
         </View>
       )}
       <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
+      <RequestModal visible={requestsVisible} onClose={() => setRequestsVisible(false)} />
+      <AppearanceModal visible={appearanceVisible} onClose={() => setAppearanceVisible(false)} />
     </ScrollView>
   );
 }
@@ -543,9 +549,9 @@ function createStyles({ colors, radius, spacing, shadow, typography, isDark }) {
       marginBottom: 2,
     },
     date: { ...typography.label },
-    themeToggle: {
+    requestsButton: {
+      width: 36,
       height: 36,
-      paddingHorizontal: 14,
       borderRadius: radius.pill,
       backgroundColor: colors.card,
       borderWidth: 1,
@@ -553,7 +559,7 @@ function createStyles({ colors, radius, spacing, shadow, typography, isDark }) {
       alignItems: "center",
       justifyContent: "center",
     },
-    themeToggleText: { fontSize: 12, fontWeight: "600", color: colors.textMuted },
+    requestsButtonText: { fontSize: 15, fontWeight: "700", color: colors.primary },
     title: { ...typography.h1 },
     card: {
       backgroundColor: colors.card,

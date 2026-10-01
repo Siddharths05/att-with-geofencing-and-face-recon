@@ -29,7 +29,15 @@ function getErrorMessage(err) {
 
 export default function LoginScreen({ navigation }) {
   const theme = useTheme();
-  const { colors, radius, spacing, shadow, typography, mode, isDark, cycleTheme } = theme;
+  const {
+    colors,
+    mode,
+    isDark,
+    cycleTheme,
+    accent,
+    setAccent,
+    accentOptions,
+  } = theme;
   const styles = useMemo(() => createStyles(theme), [theme]);
   const themeLabel = { light: "Light", dark: "Dark", reader: "Reader" }[mode];
 
@@ -64,13 +72,40 @@ export default function LoginScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <TouchableOpacity
-          style={styles.themeToggle}
-          onPress={cycleTheme}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.themeToggleText}>{themeLabel}</Text>
-        </TouchableOpacity>
+        <View style={styles.toggleRow}>
+          {/* Accent (secondary color) picker */}
+          <View style={styles.accentPicker}>
+            {accentOptions.map((opt) => {
+              const selected = opt.key === accent;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  onPress={() => setAccent(opt.key)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${opt.label} accent`}
+                  accessibilityState={{ selected }}
+                  style={[
+                    styles.swatchRing,
+                    selected && { borderColor: opt.swatch },
+                  ]}
+                >
+                  <View
+                    style={[styles.swatch, { backgroundColor: opt.swatch }]}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            style={styles.themeToggle}
+            onPress={cycleTheme}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.themeToggleText}>{themeLabel}</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.brandRow}>
           <View style={styles.logoMark}>
@@ -136,10 +171,35 @@ function createStyles({ colors, radius, spacing, shadow, typography }) {
       justifyContent: "center",
       padding: spacing.lg,
     },
-    themeToggle: {
+    toggleRow: {
       position: "absolute",
       top: spacing.md,
       right: spacing.lg,
+      flexDirection: "row",
+      alignItems: "center",
+      zIndex: 1,
+    },
+    accentPicker: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginRight: spacing.sm,
+    },
+    swatchRing: {
+      width: 34,
+      height: 34,
+      borderRadius: radius.pill,
+      borderWidth: 2,
+      borderColor: "transparent",
+      alignItems: "center",
+      justifyContent: "center",
+      marginLeft: 4,
+    },
+    swatch: {
+      width: 22,
+      height: 22,
+      borderRadius: radius.pill,
+    },
+    themeToggle: {
       height: 40,
       paddingHorizontal: 16,
       borderRadius: radius.pill,
@@ -148,7 +208,6 @@ function createStyles({ colors, radius, spacing, shadow, typography }) {
       borderColor: colors.border,
       alignItems: "center",
       justifyContent: "center",
-      zIndex: 1,
     },
     themeToggleText: { fontSize: 13, fontWeight: "600", color: colors.textMuted },
     brandRow: {

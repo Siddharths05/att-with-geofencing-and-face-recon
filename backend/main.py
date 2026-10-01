@@ -16,7 +16,8 @@ import schemas
 from database import get_db, FACES_DIR
 from face_utils import extract_face, save_face_ref, load_face_ref, compare_faces, NoFaceFoundError
 from profile_router import router as profile_router
-
+from loan_router import router as loan_router
+from leave_router import router as leave_router
 # NOTE: create_all() intentionally removed. Every table this app touches
 # (SalEmployee, SalStructure, AttendancePunch) already exists in the live
 # ERP database and is owned by that system, not this app. Previously,
@@ -39,6 +40,8 @@ app.add_middleware(
 )
 
 app.include_router(profile_router)
+app.include_router(loan_router)
+app.include_router(leave_router)
 
 ALLOWED_RADIUS_METERS = 50
 
